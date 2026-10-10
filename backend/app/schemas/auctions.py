@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.auctions.models import AuctionResult, Mechanism
+from app.auctions.models import AuctionResult, DEFAULT_CLICK_THROUGH_RATES, Mechanism, validate_click_through_rates
 
 Number = Annotated[float, Field(strict=True, allow_inf_nan=False)]
 
@@ -19,6 +20,12 @@ class RunAuctionRequest(BaseModel):
     mechanism: Mechanism
     valuations: Annotated[list[Number], Field(min_length=4, max_length=4)]
     bids: Annotated[list[Number], Field(min_length=4, max_length=4)]
+    click_through_rates: list[Number] = Field(default_factory=lambda: list(DEFAULT_CLICK_THROUGH_RATES))
+
+    @field_validator("click_through_rates")
+    @classmethod
+    def valid_click_through_rates(cls, values: list[float]) -> list[float]:
+        return list(validate_click_through_rates(values))
 
 
 class AdvertiserOut(BaseModel):
@@ -33,6 +40,12 @@ class AdvertiserOut(BaseModel):
     payment: str
     payoff: str
     overbid: bool
+    slot: int | None = None
+    click_through_rate: float = 0.0
+    payment_per_click: str = "0.00"
+    expected_value: str = "0.00"
+    expected_payment: str = "0.00"
+    expected_utility: str = "0.00"
 
 
 class AuctionOut(BaseModel):
@@ -57,6 +70,9 @@ class AuctionOut(BaseModel):
     ranking: list[str]
     explanation: str
     formulas: dict[str, str]
+    click_through_rates: list[float] = Field(default_factory=list)
+    social_welfare: str = "0.00"
+    is_multi_slot: bool = False
 
 
 def to_out(
@@ -79,6 +95,16 @@ def to_out(
             payment=money_text(advertiser.payment),
             payoff=money_text(advertiser.payoff),
             overbid=advertiser.overbid,
+            slot=advertiser.slot,
+            click_through_rate=advertiser.click_through_rate,
+            payment_per_click=money_text(advertiser.payment_per_click),
+            expected_value=money_text(
+                (advertiser.valuation * Decimal(str(advertiser.click_through_rate))).quantize(
+                    Decimal("0.01"), rounding=ROUND_HALF_UP
+                )
+            ),
+            expected_payment=money_text(advertiser.expected_payment),
+            expected_utility=money_text(advertiser.expected_utility),
         )
         for advertiser in result.results
     ]
@@ -107,4 +133,7 @@ def to_out(
         ranking=[advertiser.advertiser for advertiser in ranked_advertisers],
         explanation=explanation,
         formulas=formulas,
+        click_through_rates=list(result.click_through_rates),
+        social_welfare=money_text(result.social_welfare),
+        is_multi_slot=result.is_multi_slot,
     )

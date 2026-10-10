@@ -43,3 +43,14 @@ it("shows API errors without fabricating results", async () => {
   await userEvent.click(screen.getByRole("button", { name: /run simulation/i }));
   expect(await screen.findByRole("alert")).toHaveTextContent("invalid simulation");
 });
+
+it("runs a multi-slot mechanism with its CTR configuration", async () => {
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => result }); vi.stubGlobal("fetch", fetchMock);
+  renderApp();
+  await userEvent.click(screen.getByRole("button", { name: "GSP multi-slot" }));
+  await userEvent.click(screen.getByRole("button", { name: "Automatic simulation" }));
+  await userEvent.click(screen.getByRole("button", { name: /run simulation/i }));
+  const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+  expect(body.mechanism).toBe("gsp");
+  expect(body.click_through_rates).toEqual([1, 0.7, 0.4]);
+});

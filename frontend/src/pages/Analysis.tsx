@@ -4,11 +4,13 @@ import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContai
 import { ApiError, runSimulation, runSweep } from "../api/client";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
-import { convergenceRows, histogramRows, payoffRows, sensitivityRows, winRateRows } from "../lib/analysis";
+import { convergenceRows, histogramRows, MECHANISMS, mechanismName, payoffRows, sensitivityRows, winRateRows } from "../lib/analysis";
 import type { Mechanism } from "../types/auction";
 import type { SimulationOut, SweepOut } from "../types/simulation";
 
 const colors = { first: "#4f46e5", second: "#0e7490", green: "#059669", orange: "#ea580c" };
+const mechanismColors: Record<Mechanism, string> = { first_price: colors.first, second_price: colors.second, gsp: "#0891b2", vcg: "#0f766e" };
+const seriesKey = (m: Mechanism) => m === "first_price" ? "firstPrice" : m === "second_price" ? "secondPrice" : m;
 const alphaGrid = Array.from({ length: 15 }, (_, i) => Number((0.3 + i * 0.05).toFixed(2)));
 const selectClass = "rounded-md border border-slate-300 bg-white px-3 py-2 text-sm";
 
@@ -36,8 +38,9 @@ export default function Analysis({ embedded = false }: { embedded?: boolean } = 
     }
     setLoading(true); setSimulation(null); setSweep(null); setStrategy("");
     try {
-      const result = await runSimulation({ n_auctions: n, mechanism: "both", valuation: { mode: "random", low: lo, high: hi }, seed: parsedSeed, profiles });
-      const sensitivity = await runSweep({ n_auctions: n, mechanism: "both", low: lo, high: hi, seed: result.seed, mode: "deviator", deviator: "A", others_alpha: 1, alphas: alphaGrid });
+      const click_through_rates = [1, 0.7, 0.4];
+      const result = await runSimulation({ n_auctions: n, mechanism: "all", click_through_rates, valuation: { mode: "random", low: lo, high: hi }, seed: parsedSeed, profiles });
+      const sensitivity = await runSweep({ n_auctions: n, mechanism: "all", click_through_rates, low: lo, high: hi, seed: result.seed, mode: "deviator", deviator: "A", others_alpha: 1, alphas: alphaGrid });
       setSimulation(result); setSweep(sensitivity); setStrategy(profiles[0].label);
     } catch (e) { setError(e instanceof ApiError ? e.message : "Unexpected error while loading analysis."); }
     finally { setLoading(false); }
@@ -48,6 +51,7 @@ export default function Analysis({ embedded = false }: { embedded?: boolean } = 
   const convergence = simulation ? convergenceRows(simulation, strategy) : [];
   const sensitivity = sweep ? sensitivityRows(sweep) : [];
   const money = (v: number) => `₹${v.toFixed(2)}`;
+  const multiSlotUnit = mechanism === "gsp" || mechanism === "vcg" ? "per impression" : "per auction";
 
   return <div className={`mx-auto ${embedded ? "max-w-none space-y-4" : "max-w-7xl space-y-6"}`}>
     {!embedded && <header><h1 className="text-2xl font-semibold">Analysis</h1><p className="mt-1 max-w-3xl text-sm text-navy-700">Compare auction mechanisms and bidding rules using paired Monte Carlo simulations from the auction engine.</p></header>}
@@ -76,22 +80,22 @@ export default function Analysis({ embedded = false }: { embedded?: boolean } = 
       <details className="rounded-md border border-slate-200 bg-white">
         <summary className="cursor-pointer px-3 py-2 text-xs font-medium">Additional charts and sensitivity</summary>
         <div className="grid gap-3 border-t border-slate-100 p-3 xl:grid-cols-2">
-        <ChartCard title="Average payoff per advertiser" note={`Mean payoff per auction, including zero payoff when that advertiser loses (₹). Strategy: ${strategy || "—"}. Separate mechanism series.`}>
+        <ChartCard title="Average payoff per advertiser" note={`Mean utility ${multiSlotUnit}, including zero when unallocated (₹). Strategy: ${strategy || "—"}. Separate mechanism series.`}>
           <div className="mb-2"><label className="sr-only" htmlFor="payoff-strategy">Strategy for advertiser payoff</label><select id="payoff-strategy" className={selectClass} value={strategy} onChange={(e) => setStrategy(e.target.value)}>{strategies.map((s) => <option key={s}>{s}</option>)}</select></div>
-          <ResponsiveContainer width="100%" height="88%"><BarChart data={simulation ? payoffRows(simulation, strategy) : []}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="advertiser" /><YAxis tickFormatter={money} /><Tooltip formatter={(v: number) => money(v)} /><Legend /><Bar dataKey="firstPrice" name="First-price" fill={colors.first} /><Bar dataKey="secondPrice" name="Second-price" fill={colors.second} /></BarChart></ResponsiveContainer>
+          <ResponsiveContainer width="100%" height="88%"><BarChart data={simulation ? payoffRows(simulation, strategy) : []}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="advertiser" /><YAxis tickFormatter={money} /><Tooltip formatter={(v: number) => money(v)} /><Legend />{MECHANISMS.map((m) => <Bar key={m} dataKey={seriesKey(m)} name={mechanismName(m)} fill={mechanismColors[m]} />)}</BarChart></ResponsiveContainer>
         </ChartCard>
-        <ChartCard title="Win rate by advertiser" note={`Wins / completed auctions (percent). Strategy: ${strategy || "—"}; mechanism: ${mechanism === "first_price" ? "first-price" : "second-price"}. Sum is 100% with the engine's single-winner tie rule.`}>
-          <div className="mb-2"><label className="sr-only" htmlFor="win-mechanism">Win rate mechanism</label><select id="win-mechanism" className={selectClass} value={mechanism} onChange={(e) => setMechanism(e.target.value as Mechanism)}><option value="first_price">First-price</option><option value="second_price">Second-price</option></select></div>
-          <ResponsiveContainer width="100%" height="88%"><BarChart data={simulation ? winRateRows(simulation, strategy, mechanism) : []}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="advertiser" /><YAxis domain={[0, 1]} tickFormatter={(v) => `${(v * 100).toFixed(0)}%`} /><Tooltip formatter={(v: number) => `${(v * 100).toFixed(2)}%`} /><Bar dataKey="winRate" name="Win rate" fill={colors.green} /></BarChart></ResponsiveContainer>
+        <ChartCard title="Advertiser allocation rate" note={`Auctions with a slot / completed auctions (percent). Strategy: ${strategy || "—"}; mechanism: ${mechanismName(mechanism)}. For GSP and VCG, rates can sum above 100% because multiple advertisers receive slots.`}>
+          <div className="mb-2"><label className="sr-only" htmlFor="win-mechanism">Mechanism for allocation rate</label><select id="win-mechanism" className={selectClass} value={mechanism} onChange={(e) => setMechanism(e.target.value as Mechanism)}>{MECHANISMS.map((m) => <option key={m} value={m}>{mechanismName(m)}</option>)}</select></div>
+          <ResponsiveContainer width="100%" height="88%"><BarChart data={simulation ? winRateRows(simulation, strategy, mechanism) : []}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="advertiser" /><YAxis domain={[0, 1]} tickFormatter={(v) => `${(v * 100).toFixed(0)}%`} /><Tooltip formatter={(v: number) => `${(v * 100).toFixed(2)}%`} /><Bar dataKey="winRate" name="Allocation rate" fill={colors.green} /></BarChart></ResponsiveContainer>
         </ChartCard>
-        <ChartCard title="Revenue distribution" note={`Count of auctions in each revenue bin (₹). Strategy: ${strategy || "—"}; mechanism: ${mechanism === "first_price" ? "first-price" : "second-price"}. Bins use shared API histogram edges.`}>
+        <ChartCard title="Revenue distribution" note={`Count of auctions in each revenue bin (₹ ${multiSlotUnit}). Strategy: ${strategy || "—"}; mechanism: ${mechanismName(mechanism)}. Bins use shared API histogram edges.`}>
           <ResponsiveContainer><BarChart data={hist}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="range" interval="preserveStartEnd" angle={-35} textAnchor="end" height={65} /><YAxis allowDecimals={false} /><Tooltip /><Bar dataKey="count" name="Auctions" fill={colors.orange} /></BarChart></ResponsiveContainer>
         </ChartCard>
-        <ChartCard title="Strategy sensitivity" note="Advertiser A's mean payoff per auction (₹) as its bidding fraction α changes; B, C and D remain truthful. Same valuation draws in both mechanisms.">
-          <ResponsiveContainer><LineChart data={sensitivity}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="alpha" label={{ value: "Bidding fraction α", position: "insideBottom", offset: -5 }} /><YAxis tickFormatter={money} /><Tooltip formatter={(v: number) => money(v)} /><Legend /><Line type="monotone" dataKey="firstPrice" name="First-price" stroke={colors.first} dot={false} /><Line type="monotone" dataKey="secondPrice" name="Second-price" stroke={colors.second} dot={false} /></LineChart></ResponsiveContainer>
+        <ChartCard title="Strategy sensitivity" note={`Advertiser A's mean utility ${multiSlotUnit} (₹) as its bidding fraction α changes; B, C and D remain truthful. Same valuation draws across mechanisms.`}>
+          <ResponsiveContainer><LineChart data={sensitivity}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="alpha" label={{ value: "Bidding fraction α", position: "insideBottom", offset: -5 }} /><YAxis tickFormatter={money} /><Tooltip formatter={(v: number) => money(v)} /><Legend />{MECHANISMS.map((m) => <Line key={m} type="monotone" dataKey={seriesKey(m)} name={mechanismName(m)} stroke={mechanismColors[m]} dot={false} />)}</LineChart></ResponsiveContainer>
         </ChartCard>
-        <ChartCard title="Revenue convergence" note={`Cumulative mean revenue (₹) by auction count; strategy: ${strategy || "—"}.`}>
-          <ResponsiveContainer><LineChart data={convergence}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="n" /><YAxis tickFormatter={money} /><Tooltip formatter={(v: number) => money(v)} /><Legend /><Line type="monotone" dataKey="firstPrice" name="First-price" stroke={colors.first} dot={false} /><Line type="monotone" dataKey="secondPrice" name="Second-price" stroke={colors.second} dot={false} /></LineChart></ResponsiveContainer>
+        <ChartCard title="Revenue convergence" note={`Cumulative mean revenue (₹ ${multiSlotUnit}) by auction count; strategy: ${strategy || "—"}.`}>
+          <ResponsiveContainer><LineChart data={convergence}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="n" /><YAxis tickFormatter={money} /><Tooltip formatter={(v: number) => money(v)} /><Legend />{MECHANISMS.map((m) => <Line key={m} type="monotone" dataKey={seriesKey(m)} name={mechanismName(m)} stroke={mechanismColors[m]} dot={false} />)}</LineChart></ResponsiveContainer>
         </ChartCard>
       </div></details>
     </>}

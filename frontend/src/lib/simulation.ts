@@ -8,6 +8,7 @@ export const MAX_SEED = 2_147_483_647;
 
 export interface SimForm {
   n: number; mechanism: MechanismChoice;
+  clickThroughRates: string[];
   valMode: "random" | "fixed"; low: string; high: string; fixed: string[]; seed: string;
   useTruthful: boolean; use80: boolean; use75: boolean;
   useCustom: boolean; customAlpha: string;
@@ -15,7 +16,7 @@ export interface SimForm {
 }
 
 export const defaultForm = (): SimForm => ({
-  n: 1000, mechanism: "both", valMode: "random", low: "0", high: "100", fixed: ["100", "80", "60", "40"], seed: "",
+  n: 1000, mechanism: "both", clickThroughRates: ["1", "0.7", "0.4"], valMode: "random", low: "0", high: "100", fixed: ["100", "80", "60", "40"], seed: "",
   useTruthful: true, use80: true, use75: false, useCustom: false, customAlpha: "0.9",
   useDeviator: false, deviator: "A", deviatorAlpha: "0.75",
 });
@@ -50,6 +51,18 @@ export function buildRequest(f: SimForm): BuildResult {
       profiles.push({ label: `${f.deviator} deviates (α=${a.value}), others truthful`, alphas });
     } else errors.deviatorAlpha = a.error;
   }
+
+  const rates = f.clickThroughRates.map((raw, index) => {
+    const value = Number(raw.trim());
+    if (!raw.trim() || !Number.isFinite(value) || value < 0 || value > 1) {
+      errors[`ctr${index}`] = "Enter a click-through rate from 0 to 1.";
+    }
+    return value;
+  });
+  if (rates.length < 1 || rates.length > 4) errors.clickThroughRates = "Choose between one and four slots.";
+  if (rates.some((rate, index) => index > 0 && rates[index - 1] < rate)) {
+    errors.clickThroughRates = "CTR values must stay the same or decrease down the slots.";
+  }
   if (profiles.length === 0 && !errors.customAlpha && !errors.deviatorAlpha) errors.profiles = "Select at least one bidding strategy.";
   if (profiles.length > 8) errors.profiles = "Select at most 8 strategies.";
 
@@ -74,7 +87,7 @@ export function buildRequest(f: SimForm): BuildResult {
     else seed = Number(f.seed);
   }
   if (Object.keys(errors).length || !valuation) return { ok: false, errors };
-  return { ok: true, request: { n_auctions: f.n, mechanism: f.mechanism, valuation, seed, profiles } };
+  return { ok: true, request: { n_auctions: f.n, mechanism: f.mechanism, click_through_rates: rates, valuation, seed, profiles } };
 }
 
 export { MAX_AMOUNT };

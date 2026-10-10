@@ -14,10 +14,33 @@ CENT = Decimal("0.01")
 
 
 class Mechanism(str, Enum):
-    """Payment rule used after the highest bid wins."""
+    """Implemented single-slot and position-based multi-slot mechanisms."""
 
     FIRST_PRICE = "first_price"
     SECOND_PRICE = "second_price"
+    GSP = "gsp"
+    VCG = "vcg"
+
+
+DEFAULT_CLICK_THROUGH_RATES = (1.0, 0.70, 0.40)
+
+
+def validate_click_through_rates(values: object) -> tuple[float, ...]:
+    """Validate an ordered slot CTR vector (at most one slot per advertiser)."""
+    try:
+        raw_rates = tuple(values)  # type: ignore[arg-type]
+        if any(isinstance(value, bool) for value in raw_rates):
+            raise ValueError("boolean is not a CTR")
+        rates = tuple(float(value) for value in raw_rates)
+    except (TypeError, ValueError) as exc:
+        raise AuctionInputError("click_through_rates must be a sequence of numbers") from exc
+    if not 1 <= len(rates) <= N_ADVERTISERS:
+        raise AuctionInputError(f"click_through_rates must contain 1 to {N_ADVERTISERS} rates")
+    if any(not math.isfinite(rate) or not 0 <= rate <= 1 for rate in rates):
+        raise AuctionInputError("click-through rates must be finite and between 0 and 1")
+    if any(left < right for left, right in zip(rates, rates[1:])):
+        raise AuctionInputError("click-through rates must be non-increasing by slot position")
+    return rates
 
 
 class AuctionInputError(ValueError):
@@ -83,11 +106,16 @@ class AdvertiserResult:
     payment: Decimal
     payoff: Decimal
     overbid: bool
+    slot: int | None = None
+    click_through_rate: float = 0.0
+    payment_per_click: Decimal = Decimal("0.00")
+    expected_payment: Decimal = Decimal("0.00")
+    expected_utility: Decimal = Decimal("0.00")
 
 
 @dataclass(frozen=True)
 class AuctionResult:
-    """Complete domain result for one single-slot auction."""
+    """Complete domain result for one single-slot or multi-slot auction."""
 
     mechanism: Mechanism
     results: tuple[AdvertiserResult, ...]
@@ -105,6 +133,9 @@ class AuctionResult:
     any_overbid: bool
     tie_for_highest_bid: bool
     tied_bidders: tuple[str, ...]
+    click_through_rates: tuple[float, ...] = ()
+    social_welfare: Decimal = Decimal("0.00")
+    is_multi_slot: bool = False
     tie_break_rule: str = (
         "Ties among the highest bids go to the lowest advertiser index "
         "(A before B before C before D)."

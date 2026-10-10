@@ -20,8 +20,8 @@ it("runs paired simulation and strategy sweep using the returned seed and render
   await showAnalysis(); await userEvent.click(screen.getByRole("button", { name: /run analysis/i }));
   await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
   expect(fetchMock.mock.calls[0][0]).toBe("/api/simulations/run");
-  expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toMatchObject({ mechanism: "both", seed: 99, mode: "deviator" });
-  expect(screen.getByText(/A's mean payoff per auction/)).toBeInTheDocument();
+  expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toMatchObject({ mechanism: "all", click_through_rates: [1, 0.7, 0.4], seed: 99, mode: "deviator" });
+  expect(screen.getByText(/Advertiser A's mean utility per auction/)).toBeInTheDocument();
 });
 
 it("shows backend failures clearly", async () => {

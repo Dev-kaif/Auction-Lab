@@ -24,7 +24,7 @@ def run(
     ] = None,
 ) -> AuctionOut:
     """Calculate an auction and save its completed result."""
-    request_data: dict[str, Any] = request_body.model_dump(mode="json")
+    request_data: dict[str, Any] = request_body.model_dump(mode="json", exclude_unset=True)
 
     # A retried request with the same key returns the original saved result.
     previous_experiment = find_idempotent(
@@ -40,6 +40,7 @@ def run(
         request_body.valuations,
         request_body.bids,
         request_body.mechanism,
+        request_body.click_through_rates,
     )
     response = to_out(
         auction_result,

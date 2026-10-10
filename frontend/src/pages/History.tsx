@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import type { ExperimentDetail, ExperimentSummary } from "../types/auction";
 
 const dateText = (iso: string) => new Date(iso).toLocaleString();
-const mechanismText = (value: string) => value === "both" ? "Both mechanisms" : value === "first_price" ? "First-price" : "Second-price";
+const mechanismText = (value: string) => value === "both" ? "First-price + Second-price" : value.split(",").map((name) => ({ first_price: "First-price", second_price: "Second-price", gsp: "GSP", vcg: "VCG" } as Record<string, string>)[name] ?? name).join(" + ");
 const typeText = (value: ExperimentSummary["experiment_type"]) => value === "manual_auction" ? "Manual auction" : "Automatic simulation";
 const metricText = (metrics: Record<string, unknown>) => {
   if (metrics.n_auctions !== undefined) return `${Number(metrics.n_auctions).toLocaleString()} auctions · seed ${String(metrics.seed)} · ${Array.isArray(metrics.mean_revenue) ? `${metrics.mean_revenue.map((x) => `₹${Number(x).toFixed(2)}`).join(" / ")} mean revenue` : "aggregate results"}`;

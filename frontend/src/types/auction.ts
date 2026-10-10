@@ -1,8 +1,10 @@
-export type Mechanism = "first_price" | "second_price";
+export type Mechanism = "first_price" | "second_price" | "gsp" | "vcg";
 
 export interface AdvertiserOut {
   advertiser: string; valuation: string; bid: string; rank: number; won: boolean;
   outcome: "Won" | "Lost"; payment: string; payoff: string; overbid: boolean;
+  slot?: number | null; click_through_rate?: number; payment_per_click?: string;
+  expected_value?: string; expected_payment?: string; expected_utility?: string;
 }
 
 export interface AuctionOut {
@@ -12,9 +14,10 @@ export interface AuctionOut {
   payoff_sign: "positive" | "zero" | "negative"; any_overbid: boolean;
   tie_for_highest_bid: boolean; tied_bidders: string[]; tie_break_rule: string;
   ranking: string[]; explanation: string; formulas: Record<string, string>;
+  click_through_rates?: number[]; social_welfare?: string; is_multi_slot?: boolean;
 }
 
-export interface RunAuctionRequest { mechanism: Mechanism; valuations: number[]; bids: number[] }
+export interface RunAuctionRequest { mechanism: Mechanism; valuations: number[]; bids: number[]; click_through_rates?: number[] }
 
 export interface ExperimentSummary {
   id: string; created_at: string; experiment_type: "manual_auction" | "automatic_simulation";

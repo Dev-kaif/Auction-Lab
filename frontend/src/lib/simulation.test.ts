@@ -14,6 +14,7 @@ describe("buildRequest", () => {
     if (r.ok) {
       expect(r.request.n_auctions).toBe(1000);
       expect(r.request.mechanism).toBe("both");
+      expect(r.request.click_through_rates).toEqual([1, 0.7, 0.4]);
       expect(r.request.seed).toBeNull();
       expect(r.request.valuation).toEqual({ mode: "random", low: 0, high: 100 });
       expect(r.request.profiles.map((p) => p.alphas)).toEqual([[1, 1, 1, 1], [0.8, 0.8, 0.8, 0.8]]);
@@ -45,5 +46,11 @@ describe("buildRequest", () => {
   it("validates the seed", () => {
     expect(buildRequest(form({ seed: "42" })).ok).toBe(true);
     for (const s of ["-1", "1.5", "abc", "2147483648"]) expect(buildRequest(form({ seed: s })).ok).toBe(false);
+  });
+  it("validates finite, non-increasing slot click-through rates", () => {
+    expect(buildRequest(form({ clickThroughRates: ["1", "0.7", "0.4"] })).ok).toBe(true);
+    expect(buildRequest(form({ clickThroughRates: ["1", "0.8", "0.9"] }))).toMatchObject({ ok: false, errors: { clickThroughRates: expect.any(String) } });
+    expect(buildRequest(form({ clickThroughRates: ["1", "NaN", "0.4"] }))).toMatchObject({ ok: false, errors: { ctr1: expect.any(String) } });
+    expect(buildRequest(form({ clickThroughRates: ["1", "0.7", "0.4", "0.2", "0"] }))).toMatchObject({ ok: false, errors: { clickThroughRates: expect.any(String) } });
   });
 });

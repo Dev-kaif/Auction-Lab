@@ -29,6 +29,10 @@ def run(
 ) -> dict[str, Any]:
     """Run selected profiles and mechanisms, then persist their aggregates."""
     request_data = request_body.model_dump(mode="json")
+    # Keep retries compatible with saved runs created before CTR settings
+    # became part of the request contract; the engine supplies the same default.
+    if "click_through_rates" not in request_body.model_fields_set:
+        request_data.pop("click_through_rates", None)
 
     # Return the stored response for a safely retried request.
     previous_experiment = find_idempotent(
@@ -50,6 +54,7 @@ def run(
         fixed_values=valuation_settings.fixed_values,
         seed=request_body.seed,
         profiles=[profile.model_dump() for profile in request_body.profiles],
+        click_through_rates=request_body.click_through_rates,
     )
 
     save_simulation(session, request_data, result, idempotency_key)
@@ -73,4 +78,5 @@ def sweep(request_body: SweepRequest) -> dict[str, Any]:
         deviator=request_body.deviator,
         others_alpha=request_body.others_alpha,
         alphas=request_body.alphas,
+        click_through_rates=request_body.click_through_rates,
     )

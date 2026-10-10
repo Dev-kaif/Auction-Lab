@@ -12,8 +12,10 @@ from app.analytics.metrics import DEFINITIONS, summarize
 from app.auctions.models import (
     ADVERTISERS,
     AuctionInputError,
+    DEFAULT_CLICK_THROUGH_RATES,
     Mechanism,
     validate_vector,
+    validate_click_through_rates,
 )
 from app.auctions.strategies import MAX_ALPHA
 from app.simulation.engine import Batch, bids_from_alphas, parse_alphas, run_batch
@@ -39,6 +41,8 @@ def resolve_mechanisms(choice: str) -> list[Mechanism]:
     """Expand the UI's `both` option into the two implemented mechanisms."""
     if choice == "both":
         return [Mechanism.FIRST_PRICE, Mechanism.SECOND_PRICE]
+    if choice == "all":
+        return list(Mechanism)
     return [Mechanism(choice)]
 
 
@@ -112,6 +116,7 @@ def _run_profiles(
     valuations: np.ndarray,
     mechanisms: Sequence[Mechanism],
     profiles: Sequence[tuple[str, np.ndarray]],
+    click_through_rates: Sequence[float],
 ) -> list[CompletedProfileRun]:
     """Run every selected profile/mechanism pair on one valuation matrix."""
     completed: list[CompletedProfileRun] = []
@@ -119,7 +124,7 @@ def _run_profiles(
         # Bids are the same across mechanisms; only the payment rule changes.
         bids = bids_from_alphas(valuations, alphas)
         for mechanism in mechanisms:
-            batch = run_batch(valuations, bids, mechanism)
+            batch = run_batch(valuations, bids, mechanism, click_through_rates)
             completed.append(
                 CompletedProfileRun(label, alphas, mechanism, bids, batch)
             )
@@ -163,6 +168,7 @@ def run_experiment(
     fixed_values: Sequence[float] | None,
     seed: int | None,
     profiles: Sequence[dict[str, Any]],
+    click_through_rates: Sequence[float] = DEFAULT_CLICK_THROUGH_RATES,
 ) -> dict[str, Any]:
     """Simulate the requested profile/mechanism combinations and summarize them.
 
@@ -183,7 +189,8 @@ def run_experiment(
         used_seed,
     )
 
-    completed_runs = _run_profiles(valuations, mechanisms, parsed_profiles)
+    ctrs = validate_click_through_rates(click_through_rates)
+    completed_runs = _run_profiles(valuations, mechanisms, parsed_profiles, ctrs)
     histogram_edges = _shared_revenue_edges(completed_runs)
     result_blocks = _result_blocks(valuations, completed_runs, histogram_edges)
 
@@ -207,6 +214,7 @@ def run_experiment(
         "seed": used_seed,
         "seed_was_generated": seed_was_generated,
         "mechanisms": [item.value for item in mechanisms],
+        "click_through_rates": list(ctrs) if any(m in (Mechanism.GSP, Mechanism.VCG) for m in mechanisms) else None,
         "valuation": valuation_settings,
         "notes": notes,
         "definitions": DEFINITIONS,
@@ -234,6 +242,7 @@ def run_sweep(
     others_alpha: float = 1.0,
     alphas: Sequence[float] | None = None,
     max_n: int = MAX_AUCTIONS,
+    click_through_rates: Sequence[float] = DEFAULT_CLICK_THROUGH_RATES,
 ) -> dict[str, Any]:
     """Measure outcomes as one or all advertisers change their bid fraction.
 
@@ -242,6 +251,7 @@ def run_sweep(
     `others_alpha`. Every point and mechanism shares the same valuations.
     """
     auction_count = _validate_auction_count(n_auctions, max_n)
+    ctrs = validate_click_through_rates(click_through_rates)
     if mode not in ("all", "deviator"):
         raise AuctionInputError("sweep mode must be 'all' or 'deviator'")
     if deviator not in ADVERTISERS:
@@ -278,7 +288,7 @@ def run_sweep(
                 )
 
             bids = bids_from_alphas(valuations, fractions)
-            batch = run_batch(valuations, bids, auction_mechanism)
+            batch = run_batch(valuations, bids, auction_mechanism, ctrs)
             mechanism_points.append(
                 {
                     "alpha": alpha,
@@ -290,7 +300,7 @@ def run_sweep(
                         else None
                     ),
                     "deviator_win_rate": (
-                        float((batch.winner == deviator_index).mean())
+                        float((batch.slot_assignment[:, deviator_index] > 0).mean())
                         if mode == "deviator"
                         else None
                     ),
@@ -311,5 +321,8 @@ def run_sweep(
             "high": high,
             "distribution": "uniform",
         },
+        "click_through_rates": list(ctrs)
+        if any(Mechanism(key) in (Mechanism.GSP, Mechanism.VCG) for key in points_by_mechanism)
+        else None,
         "points": points_by_mechanism,
     }

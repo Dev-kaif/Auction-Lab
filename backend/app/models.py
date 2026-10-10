@@ -42,7 +42,7 @@ class Experiment(Base):
         unique=True,
         nullable=True,
     )
-    mechanism: Mapped[str] = mapped_column(String(24), nullable=False)
+    mechanism: Mapped[str] = mapped_column(String(64), nullable=False)
     strategy: Mapped[str] = mapped_column(String(600), nullable=False)
 
     # JSON columns preserve the original request settings and computed outputs.

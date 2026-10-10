@@ -35,7 +35,7 @@ it("sends the entered values and displays the backend's result", async () => {
   await waitFor(() => expect(screen.getByText("BACKEND-EXPLANATION-TEXT")).toBeInTheDocument());
   const [url, init] = fetchMock.mock.calls[0];
   expect(url).toBe("/api/auctions/run");
-  expect(JSON.parse(init.body)).toEqual({ mechanism: "second_price", valuations: [100, 80, 60, 40], bids: [100, 80, 60, 40] });
+  expect(JSON.parse(init.body)).toEqual({ mechanism: "second_price", valuations: [100, 80, 60, 40], bids: [100, 80, 60, 40], click_through_rates: [1, 0.7, 0.4] });
   expect(screen.getByRole("status")).toHaveTextContent("B wins with a bid of ₹111.00"); // winner comes from the response
   expect(screen.getByRole("status")).not.toHaveTextContent("A wins");
   expect(screen.getAllByText("₹77.00").length).toBeGreaterThan(0);              // payment from the response
@@ -82,4 +82,39 @@ it("preset buttons and reset change the bid fields", async () => {
   await userEvent.type(screen.getByLabelText(/valuation for advertiser C/i), "9");
   await userEvent.click(screen.getByRole("button", { name: /reset values/i }));
   expect(screen.getByLabelText(/valuation for advertiser C/i)).toHaveValue("60");
+});
+
+it("sends editable CTRs to the backend for GSP and shows the returned allocation", async () => {
+  const multiResult: AuctionOut = {
+    ...canned, mechanism: "gsp", is_multi_slot: true, click_through_rates: [1, 0.65, 0.4],
+    social_welfare: "180.00", revenue: "136.00", explanation: "GSP allocation from backend",
+    advertisers: canned.advertisers.map((row, i) => ({
+      ...row, won: i < 3, slot: i < 3 ? i + 1 : null,
+      click_through_rate: i < 3 ? [1, 0.65, 0.4][i] : 0,
+      payment_per_click: ["80.00", "60.00", "40.00", "0.00"][i],
+      expected_value: ["100.00", "52.00", "24.00", "0.00"][i],
+      expected_payment: ["80.00", "39.00", "16.00", "0.00"][i],
+      expected_utility: ["20.00", "13.00", "8.00", "0.00"][i],
+    })),
+  };
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => multiResult });
+  vi.stubGlobal("fetch", fetchMock);
+  render(<MemoryRouter><ManualAuction mechanism="gsp" /></MemoryRouter>);
+  await userEvent.clear(screen.getByLabelText("Click-through rate for slot 2"));
+  await userEvent.type(screen.getByLabelText("Click-through rate for slot 2"), "0.65");
+  await userEvent.click(screen.getByRole("button", { name: /run auction/i }));
+  await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+  expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({ mechanism: "gsp", click_through_rates: [1, 0.65, 0.4] });
+  expect(await screen.findByText(/A → Slot 1 · B → Slot 2 · C → Slot 3/)).toBeInTheDocument();
+  expect(screen.getByText("GSP allocation from backend")).toBeInTheDocument();
+});
+
+it("blocks increasing CTR values before a multi-slot request", async () => {
+  const fetchMock = okFetch(); vi.stubGlobal("fetch", fetchMock);
+  render(<MemoryRouter><ManualAuction mechanism="gsp" /></MemoryRouter>);
+  await userEvent.clear(screen.getByLabelText("Click-through rate for slot 1"));
+  await userEvent.type(screen.getByLabelText("Click-through rate for slot 1"), "0.6");
+  await userEvent.click(screen.getByRole("button", { name: /run auction/i }));
+  expect(await screen.findByRole("alert")).toHaveTextContent(/non-increasing order/i);
+  expect(fetchMock).not.toHaveBeenCalled();
 });

@@ -10,6 +10,8 @@ type Mode = "manual" | "automatic";
 const mechanismOptions: { value: Mechanism; label: string }[] = [
   { value: "first_price", label: "First-price auction" },
   { value: "second_price", label: "Second-price auction" },
+  { value: "gsp", label: "GSP multi-slot" },
+  { value: "vcg", label: "VCG multi-slot" },
 ];
 
 function Segment<T extends string>({ label, value, options, onChange }: {
@@ -17,10 +19,10 @@ function Segment<T extends string>({ label, value, options, onChange }: {
 }) {
   return <fieldset className="min-w-0">
     <legend className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-navy-500">{label}</legend>
-    <div className="flex rounded-xl bg-[#f0f1f5] p-1" role="group" aria-label={label}>
+    <div className="flex flex-wrap rounded-xl bg-[#f0f1f5] p-1 sm:flex-nowrap" role="group" aria-label={label}>
       {options.map((option) => <button key={option.value} type="button" aria-pressed={value === option.value}
         onClick={() => onChange(option.value)}
-        className={`min-h-10 flex-1 rounded-lg px-3 text-sm font-medium transition-all duration-150 ${value === option.value ? "bg-white text-[#263879] shadow-sm ring-1 ring-black/5" : "text-slate-600 hover:text-slate-900"}`}>
+        className={`min-h-10 min-w-[calc(50%-4px)] flex-1 rounded-lg px-3 text-sm font-medium transition-all duration-150 sm:min-w-0 ${value === option.value ? "bg-white text-[#263879] shadow-sm ring-1 ring-black/5" : "text-slate-600 hover:text-slate-900"}`}>
         {option.label}
       </button>)}
     </div>
@@ -56,8 +58,12 @@ export default function Workspace() {
         <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-[#5266aa]" aria-hidden />
         <p className="text-sm leading-6 text-slate-600">
           {mechanism === "first_price"
-            ? <>First-price: the highest bidder wins and pays <strong className="font-semibold text-slate-800">their own bid</strong>. Bid shading trades off winning probability against payoff.</>
-            : <>Second-price: the highest bidder wins and pays the <strong className="font-semibold text-slate-800">second-highest bid</strong>. Under standard independent private values, truthful bidding is weakly dominant.</>}
+            ? <>First-price: the highest bidder wins and pays their own bid. Bid shading trades off winning probability against payoff.</>
+            : mechanism === "second_price"
+              ? <>Second-price: the highest bidder wins and pays the second-highest bid. Under standard independent private values, truthful bidding is weakly dominant.</>
+              : mechanism === "gsp"
+                ? <>GSP: advertisers are ranked into slots by bid; each pays the next-ranked bid per click. Slot CTRs scale expected value, payment, and utility.</>
+                : <>VCG: bids determine slot allocation; each advertiser pays the expected welfare externality they impose on others.</>}
         </p>
       </div>
 

@@ -1,12 +1,13 @@
 import type { Mechanism } from "./auction";
 
-export type MechanismChoice = Mechanism | "both";
+export type MechanismChoice = Mechanism | "both" | "all";
 
 export interface StrategyProfile { label: string; alphas: number[] }
 
 export interface RunSimulationRequest {
   n_auctions: number;
   mechanism: MechanismChoice;
+  click_through_rates?: number[];
   valuation: { mode: "random"; low: number; high: number } | { mode: "fixed"; fixed_values: number[] };
   seed: number | null;
   profiles: StrategyProfile[];
@@ -22,16 +23,21 @@ export interface ResultBlock {
   avg_bidder_surplus: number; highest_value_win_rate: number; overbid_rate: number;
   negative_winner_payoff_rate: number; win_rate: Record<string, number>; avg_payoff: Record<string, number>;
   revenue_histogram: Histogram; convergence: Convergence;
+  avg_expected_utility?: Record<string, number>; average_click_through_rate?: Record<string, number>;
+  average_payment_per_click?: Record<string, number>; slot_win_rate?: Record<string, number>;
+  avg_social_welfare?: number; avg_expected_payment?: number; avg_total_expected_utility?: number;
 }
 
 export interface SimulationOut {
   n_auctions: number; seed: number; seed_was_generated: boolean; mechanisms: Mechanism[];
+  click_through_rates?: number[] | null;
   valuation: { mode: "random" | "fixed"; low: number | null; high: number | null; distribution: string; fixed_values: number[] | null };
   notes: string[]; definitions: Record<string, string>; results: ResultBlock[];
 }
 
 export interface SweepRequest {
   n_auctions: number; mechanism: MechanismChoice; low: number; high: number; seed: number | null;
+  click_through_rates?: number[];
   mode: "all" | "deviator"; deviator: "A" | "B" | "C" | "D"; others_alpha: number; alphas: number[];
 }
 export interface SweepPoint {

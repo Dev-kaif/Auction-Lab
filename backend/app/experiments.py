@@ -70,6 +70,7 @@ def save_manual(
             "mechanism": request["mechanism"],
             "valuations": request["valuations"],
             "bids": request["bids"],
+            **({"click_through_rates": request["click_through_rates"]} if "click_through_rates" in request else {}),
         },
         result=result,
         metrics={
@@ -77,6 +78,10 @@ def save_manual(
             "payment": result["payment"],
             "revenue": result["revenue"],
             "winner_payoff": result["winner_payoff"],
+            **({
+                "social_welfare": result["social_welfare"],
+                "allocated_slots": sum(row.get("slot") is not None for row in result["advertisers"]),
+            } if result.get("is_multi_slot") else {}),
         },
     )
     return _save_with_idempotency_recovery(
@@ -100,7 +105,10 @@ def save_simulation(
     mean_revenues = [
         block["revenue"]["mean"] for block in result["results"]
     ]
-    mechanism_label = "both" if len(mechanisms) == 2 else mechanisms[0]
+    mechanism_label = (
+        "both" if mechanisms == ["first_price", "second_price"]
+        else ",".join(mechanisms)
+    )
 
     experiment = Experiment(
         experiment_type=AUTOMATIC,
@@ -256,15 +264,14 @@ def csv_content(experiment: Experiment) -> str:
 
 def _write_manual_csv(writer: Any, experiment: Experiment) -> None:
     """Write one CSV data row for each advertiser in a manual auction."""
-    writer.writerow(
-        [
-            "experiment_id", "created_at", "mechanism", "advertiser",
-            "valuation", "bid", "rank", "winner", "payment", "payoff",
-        ]
-    )
+    multi_slot = bool(experiment.result.get("is_multi_slot"))
+    headers = ["experiment_id", "created_at", "mechanism", "advertiser", "valuation", "bid", "rank", "winner", "payment", "payoff"]
+    if multi_slot:
+        headers[4:6] = ["valuation_per_click", "bid_per_click"]
+        headers.extend(["slot", "click_through_rate", "expected_value_per_impression", "payment_per_click", "expected_payment_per_impression", "expected_utility_per_impression"])
+    writer.writerow(headers)
     for advertiser in experiment.result["advertisers"]:
-        writer.writerow(
-            [
+        row = [
                 experiment.id,
                 _iso(experiment.created_at),
                 experiment.mechanism,
@@ -276,7 +283,13 @@ def _write_manual_csv(writer: Any, experiment: Experiment) -> None:
                 advertiser["payment"],
                 advertiser["payoff"],
             ]
-        )
+        if multi_slot:
+            row.extend([
+                advertiser.get("slot"), advertiser.get("click_through_rate"),
+                advertiser.get("expected_value"), advertiser.get("payment_per_click"),
+                advertiser.get("expected_payment"), advertiser.get("expected_utility"),
+            ])
+        writer.writerow(row)
 
 
 def _write_simulation_csv(writer: Any, experiment: Experiment) -> None:
@@ -292,7 +305,11 @@ def _write_simulation_csv(writer: Any, experiment: Experiment) -> None:
             "highest_value_win_rate", "overbid_rate",
             "negative_winner_payoff_rate", "win_rate_A", "win_rate_B",
             "win_rate_C", "win_rate_D", "mean_payoff_A", "mean_payoff_B",
-            "mean_payoff_C", "mean_payoff_D",
+            "mean_payoff_C", "mean_payoff_D", "avg_expected_payment",
+            "avg_total_expected_utility", "avg_social_welfare", "click_through_rates",
+            "avg_ctr_A", "avg_ctr_B", "avg_ctr_C", "avg_ctr_D",
+            "avg_payment_per_click_A", "avg_payment_per_click_B",
+            "avg_payment_per_click_C", "avg_payment_per_click_D",
         ]
     )
 
@@ -328,6 +345,12 @@ def _write_simulation_csv(writer: Any, experiment: Experiment) -> None:
                 result_block["negative_winner_payoff_rate"],
                 *(result_block["win_rate"][name] for name in "ABCD"),
                 *(result_block["avg_payoff"][name] for name in "ABCD"),
+                result_block.get("avg_expected_payment"),
+                result_block.get("avg_total_expected_utility"),
+                result_block.get("avg_social_welfare"),
+                _json_cell(experiment.result.get("click_through_rates")),
+                *(result_block.get("average_click_through_rate", {}).get(name) for name in "ABCD"),
+                *(result_block.get("average_payment_per_click", {}).get(name) for name in "ABCD"),
             ]
         )
 

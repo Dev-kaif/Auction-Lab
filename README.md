@@ -1,6 +1,6 @@
 # AuctionLab
 
-AuctionLab is an educational game theory simulator for exploring single-item auctions. Compare first-price and second-price rules using four advertisers (A, B, C, and D), either by entering valuations and bids yourself or by running automatic simulations. Results come from the auction engine and include payments, payoffs, revenue, and strategy comparisons. Completed experiments are saved locally in SQLite and can be revisited or exported as CSV.
+AuctionLab is an educational game theory simulator for exploring online advertising auctions. Compare first-price and second-price single-slot auctions with multi-slot GSP and VCG using four advertisers (A, B, C, and D). Enter valuations and bids manually or run paired simulations to inspect backend-calculated allocations, payments, utilities, revenue, and welfare. Completed experiments are saved locally in SQLite and can be revisited or exported as CSV.
 
 ## Run with Docker
 
