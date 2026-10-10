@@ -15,5 +15,9 @@ def generate_uniform_valuations(n_auctions: int, low: float, high: float, seed: 
         raise AuctionInputError("n_auctions must be a positive integer")
     if not (np.isfinite(low) and np.isfinite(high)) or low < 0 or high <= low or high > float(MAX_VALUE):
         raise AuctionInputError("require 0 <= low < high <= max value, all finite")
+
+    # Rows represent auctions and columns follow A, B, C, D. Reusing the seed
+    # recreates this same matrix, which lets experiments compare strategies on
+    # identical valuation scenarios instead of unrelated random samples.
     rng = np.random.default_rng(seed)
     return rng.uniform(low, high, size=(int(n_auctions), N_ADVERTISERS))

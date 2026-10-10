@@ -1,8 +1,5 @@
-"""Domain types and input validation for the four-advertiser auction.
+"""Core domain types and input validation for the four-advertiser auction."""
 
-All monetary values in the exact engine are Decimal rounded to 2 places (paise),
-so displayed currency never shows floating-point artifacts.
-"""
 from __future__ import annotations
 
 import math
@@ -12,68 +9,86 @@ from enum import Enum
 
 ADVERTISERS: tuple[str, ...] = ("A", "B", "C", "D")
 N_ADVERTISERS = len(ADVERTISERS)
-MAX_VALUE = Decimal("1000000")  # maximum configurable valuation or bid (INR)
+MAX_VALUE = Decimal("1000000")
 CENT = Decimal("0.01")
 
 
 class Mechanism(str, Enum):
+    """Payment rule used after the highest bid wins."""
+
     FIRST_PRICE = "first_price"
     SECOND_PRICE = "second_price"
 
 
 class AuctionInputError(ValueError):
-    """Raised when valuations, bids or parameters are invalid."""
+    """Raised when a domain input is outside the auction's valid range."""
 
 
 def to_money(value: object, name: str = "value") -> Decimal:
-    """Validate and convert a number to a Decimal rounded to 2 places."""
+    """Validate a monetary amount and round it to paise, half up."""
     if isinstance(value, bool):
         raise AuctionInputError(f"{name} must be a number, got a boolean")
+
     try:
         if isinstance(value, float):
             if not math.isfinite(value):
                 raise AuctionInputError(f"{name} must be finite, got {value}")
-            d = Decimal(str(value))
+            amount = Decimal(str(value))
         else:
-            d = Decimal(value)  # type: ignore[arg-type]
+            amount = Decimal(value)  # type: ignore[arg-type]
     except AuctionInputError:
         raise
     except Exception as exc:
         raise AuctionInputError(f"{name} is not a valid number: {value!r}") from exc
-    if not d.is_finite():
+
+    if not amount.is_finite():
         raise AuctionInputError(f"{name} must be finite, got {value}")
-    if d < 0:
+    if amount < 0:
         raise AuctionInputError(f"{name} must be non-negative, got {value}")
-    if d > MAX_VALUE:
+    if amount > MAX_VALUE:
         raise AuctionInputError(f"{name} must be at most {MAX_VALUE}, got {value}")
-    return d.quantize(CENT, rounding=ROUND_HALF_UP)
+
+    return amount.quantize(CENT, rounding=ROUND_HALF_UP)
 
 
 def validate_vector(values: object, name: str) -> tuple[Decimal, ...]:
-    """Validate a length-4 sequence of valuations or bids."""
+    """Convert a four-item A–D list to validated Decimal amounts."""
     try:
-        seq = list(values)  # type: ignore[call-overload]
+        items = list(values)  # type: ignore[call-overload]
     except TypeError as exc:
-        raise AuctionInputError(f"{name} must be a sequence of {N_ADVERTISERS} numbers") from exc
-    if len(seq) != N_ADVERTISERS:
-        raise AuctionInputError(f"{name} must contain exactly {N_ADVERTISERS} values, got {len(seq)}")
-    return tuple(to_money(v, f"{name}[{ADVERTISERS[i]}]") for i, v in enumerate(seq))
+        raise AuctionInputError(
+            f"{name} must be a sequence of {N_ADVERTISERS} numbers"
+        ) from exc
+
+    if len(items) != N_ADVERTISERS:
+        raise AuctionInputError(
+            f"{name} must contain exactly {N_ADVERTISERS} values, got {len(items)}"
+        )
+
+    return tuple(
+        to_money(value, f"{name}[{ADVERTISERS[index]}]")
+        for index, value in enumerate(items)
+    )
 
 
 @dataclass(frozen=True)
 class AdvertiserResult:
+    """One advertiser's input and calculated outcome for a manual auction."""
+
     advertiser: str
     valuation: Decimal
     bid: Decimal
-    rank: int  # 1 = highest bid; ties ranked by advertiser index
+    rank: int  # 1 is the top bid; equal bids follow A, B, C, D order.
     won: bool
     payment: Decimal
     payoff: Decimal
-    overbid: bool  # bid > valuation
+    overbid: bool
 
 
 @dataclass(frozen=True)
 class AuctionResult:
+    """Complete domain result for one single-slot auction."""
+
     mechanism: Mechanism
     results: tuple[AdvertiserResult, ...]
     winner_index: int
@@ -86,8 +101,11 @@ class AuctionResult:
     highest_valuation: Decimal
     highest_valued_won: bool
     winner_surplus: Decimal
-    payoff_sign: str  # "positive" | "zero" | "negative"
+    payoff_sign: str
     any_overbid: bool
     tie_for_highest_bid: bool
     tied_bidders: tuple[str, ...]
-    tie_break_rule: str = "Ties among the highest bids go to the lowest advertiser index (A before B before C before D)."
+    tie_break_rule: str = (
+        "Ties among the highest bids go to the lowest advertiser index "
+        "(A before B before C before D)."
+    )

@@ -1,3 +1,5 @@
+"""Validated input and output models for simulations and strategy sweeps."""
+
 from __future__ import annotations
 
 from typing import Annotated, Literal
@@ -12,7 +14,10 @@ StrictInt = Annotated[int, Field(strict=True)]
 
 
 class ValuationSpec(BaseModel):
+    """Choose random uniform values or one fixed value per advertiser."""
+
     model_config = ConfigDict(extra="forbid")
+
     mode: Literal["random", "fixed"] = "random"
     low: Number = 0
     high: Number = 100
@@ -20,13 +25,19 @@ class ValuationSpec(BaseModel):
 
 
 class StrategyProfile(BaseModel):
+    """One labelled set of four bidding fractions, ordered A through D."""
+
     model_config = ConfigDict(extra="forbid")
+
     label: Annotated[str, Field(min_length=1, max_length=60)]
     alphas: Alphas
 
 
 class RunSimulationRequest(BaseModel):
+    """Settings for running strategy profiles over repeated auctions."""
+
     model_config = ConfigDict(extra="forbid")
+
     n_auctions: StrictInt = 1000
     mechanism: Literal["first_price", "second_price", "both"] = "both"
     valuation: ValuationSpec = ValuationSpec()
@@ -35,18 +46,33 @@ class RunSimulationRequest(BaseModel):
 
 
 class RevenueStats(BaseModel):
-    mean: float; median: float; std: float; se: float; min: float; max: float
+    """Distribution summary for seller revenue, in rupees per auction."""
+
+    mean: float
+    median: float
+    std: float
+    se: float
+    min: float
+    max: float
 
 
 class Histogram(BaseModel):
-    edges: list[float]; counts: list[int]
+    """Shared rupee-bin boundaries and the number of observations per bin."""
+
+    edges: list[float]
+    counts: list[int]
 
 
 class Convergence(BaseModel):
-    n: list[int]; mean: list[float]
+    """Auction-count checkpoints and the running mean revenue at each one."""
+
+    n: list[int]
+    mean: list[float]
 
 
 class ResultBlock(BaseModel):
+    """Aggregate outcomes for a single strategy profile and mechanism."""
+
     profile_label: str
     alphas: list[float]
     mechanism: Mechanism
@@ -66,6 +92,8 @@ class ResultBlock(BaseModel):
 
 
 class SimulationOut(BaseModel):
+    """Simulation settings, seed metadata, definitions, and result blocks."""
+
     n_auctions: int
     seed: int
     seed_was_generated: bool
@@ -77,7 +105,10 @@ class SimulationOut(BaseModel):
 
 
 class SweepRequest(BaseModel):
+    """Settings for varying a bidding fraction on common random valuations."""
+
     model_config = ConfigDict(extra="forbid")
+
     n_auctions: StrictInt = 5000
     mechanism: Literal["first_price", "second_price", "both"] = "both"
     low: Number = 0
@@ -90,6 +121,8 @@ class SweepRequest(BaseModel):
 
 
 class SweepOut(BaseModel):
+    """One output point per alpha and auction mechanism."""
+
     n_auctions: int
     seed: int
     seed_was_generated: bool

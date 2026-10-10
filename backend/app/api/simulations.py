@@ -1,33 +1,76 @@
-from typing import Annotated
+"""HTTP routes for repeated simulations and strategy sweeps."""
+
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Header
 from sqlalchemy.orm import Session
 
-from app.schemas.simulations import RunSimulationRequest, SimulationOut, SweepOut, SweepRequest
-from app.simulation.runner import run_experiment, run_sweep
 from app.db import get_session
 from app.experiments import AUTOMATIC, find_idempotent, save_simulation
+from app.schemas.simulations import (
+    RunSimulationRequest,
+    SimulationOut,
+    SweepOut,
+    SweepRequest,
+)
+from app.simulation.runner import run_experiment, run_sweep
 
 router = APIRouter(prefix="/api/simulations", tags=["simulations"])
 
 
 @router.post("/run", response_model=SimulationOut, summary="Run a repeated-auction simulation")
-def run(req: RunSimulationRequest, session: Session = Depends(get_session),
-        idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key", min_length=1, max_length=64)] = None) -> dict:
-    request = req.model_dump(mode="json")
-    previous = find_idempotent(session, idempotency_key, AUTOMATIC, request)
-    if previous is not None:
-        return previous.result
-    v = req.valuation
+def run(
+    request_body: RunSimulationRequest,
+    session: Session = Depends(get_session),
+    idempotency_key: Annotated[
+        str | None,
+        Header(alias="Idempotency-Key", min_length=1, max_length=64),
+    ] = None,
+) -> dict[str, Any]:
+    """Run selected profiles and mechanisms, then persist their aggregates."""
+    request_data = request_body.model_dump(mode="json")
+
+    # Return the stored response for a safely retried request.
+    previous_experiment = find_idempotent(
+        session,
+        idempotency_key,
+        AUTOMATIC,
+        request_data,
+    )
+    if previous_experiment is not None:
+        return previous_experiment.result
+
+    valuation_settings = request_body.valuation
     result = run_experiment(
-        n_auctions=req.n_auctions, mechanism=req.mechanism, mode=v.mode, low=v.low, high=v.high,
-        fixed_values=v.fixed_values, seed=req.seed, profiles=[p.model_dump() for p in req.profiles])
-    save_simulation(session, request, result, idempotency_key)
+        n_auctions=request_body.n_auctions,
+        mechanism=request_body.mechanism,
+        mode=valuation_settings.mode,
+        low=valuation_settings.low,
+        high=valuation_settings.high,
+        fixed_values=valuation_settings.fixed_values,
+        seed=request_body.seed,
+        profiles=[profile.model_dump() for profile in request_body.profiles],
+    )
+
+    save_simulation(session, request_data, result, idempotency_key)
     return result
 
 
-@router.post("/sweep", response_model=SweepOut, summary="Sweep a bidding fraction over a grid on shared valuations")
-def sweep(req: SweepRequest) -> dict:
-    return run_sweep(n_auctions=req.n_auctions, mechanism=req.mechanism, low=req.low, high=req.high,
-                     seed=req.seed, mode=req.mode, deviator=req.deviator, others_alpha=req.others_alpha,
-                     alphas=req.alphas)
+@router.post(
+    "/sweep",
+    response_model=SweepOut,
+    summary="Sweep a bidding fraction over a grid on shared valuations",
+)
+def sweep(request_body: SweepRequest) -> dict[str, Any]:
+    """Evaluate strategy fractions against the same generated valuations."""
+    return run_sweep(
+        n_auctions=request_body.n_auctions,
+        mechanism=request_body.mechanism,
+        low=request_body.low,
+        high=request_body.high,
+        seed=request_body.seed,
+        mode=request_body.mode,
+        deviator=request_body.deviator,
+        others_alpha=request_body.others_alpha,
+        alphas=request_body.alphas,
+    )

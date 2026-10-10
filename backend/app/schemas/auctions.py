@@ -1,8 +1,10 @@
+"""Validated request and response models for a single auction."""
+
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_serializer
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.auctions.models import AuctionResult, Mechanism
 
@@ -10,13 +12,18 @@ Number = Annotated[float, Field(strict=True, allow_inf_nan=False)]
 
 
 class RunAuctionRequest(BaseModel):
+    """The user-supplied mechanism, valuations, and bids for advertisers A–D."""
+
     model_config = ConfigDict(extra="forbid")
+
     mechanism: Mechanism
     valuations: Annotated[list[Number], Field(min_length=4, max_length=4)]
     bids: Annotated[list[Number], Field(min_length=4, max_length=4)]
 
 
 class AdvertiserOut(BaseModel):
+    """One advertiser's calculated outcome in a completed auction."""
+
     advertiser: str
     valuation: str
     bid: str
@@ -29,6 +36,8 @@ class AdvertiserOut(BaseModel):
 
 
 class AuctionOut(BaseModel):
+    """The winner, payment rule, payoff details, and formulas for one auction."""
+
     mechanism: Mechanism
     advertisers: list[AdvertiserOut]
     winner: str
@@ -50,18 +59,52 @@ class AuctionOut(BaseModel):
     formulas: dict[str, str]
 
 
-def to_out(r: AuctionResult, explanation: str, formulas: dict[str, str]) -> AuctionOut:
-    s = lambda d: f"{d:.2f}"  # noqa: E731 - exact Decimal -> 2dp string
-    rows = [AdvertiserOut(advertiser=x.advertiser, valuation=s(x.valuation), bid=s(x.bid), rank=x.rank,
-                          won=x.won, outcome="Won" if x.won else "Lost", payment=s(x.payment),
-                          payoff=s(x.payoff), overbid=x.overbid) for x in r.results]
+def to_out(
+    result: AuctionResult,
+    explanation: str,
+    formulas: dict[str, str],
+) -> AuctionOut:
+    """Serialize exact Decimal outcomes as two-decimal currency strings."""
+    def money_text(value: Any) -> str:
+        return f"{value:.2f}"
+
+    advertiser_rows = [
+        AdvertiserOut(
+            advertiser=advertiser.advertiser,
+            valuation=money_text(advertiser.valuation),
+            bid=money_text(advertiser.bid),
+            rank=advertiser.rank,
+            won=advertiser.won,
+            outcome="Won" if advertiser.won else "Lost",
+            payment=money_text(advertiser.payment),
+            payoff=money_text(advertiser.payoff),
+            overbid=advertiser.overbid,
+        )
+        for advertiser in result.results
+    ]
+    ranked_advertisers = sorted(
+        result.results,
+        key=lambda advertiser: advertiser.rank,
+    )
+
     return AuctionOut(
-        mechanism=r.mechanism, advertisers=rows, winner=r.winner, winning_bid=s(r.winning_bid),
-        runner_up_bid=s(r.runner_up_bid), payment=s(r.payment), winner_payoff=s(r.winner_payoff),
-        revenue=s(r.revenue), highest_valuation=s(r.highest_valuation),
-        highest_valued_won=r.highest_valued_won, winner_surplus=s(r.winner_surplus),
-        payoff_sign=r.payoff_sign, any_overbid=r.any_overbid, tie_for_highest_bid=r.tie_for_highest_bid,
-        tied_bidders=list(r.tied_bidders), tie_break_rule=r.tie_break_rule,
-        ranking=[x.advertiser for x in sorted(r.results, key=lambda x: x.rank)],
-        explanation=explanation, formulas=formulas,
+        mechanism=result.mechanism,
+        advertisers=advertiser_rows,
+        winner=result.winner,
+        winning_bid=money_text(result.winning_bid),
+        runner_up_bid=money_text(result.runner_up_bid),
+        payment=money_text(result.payment),
+        winner_payoff=money_text(result.winner_payoff),
+        revenue=money_text(result.revenue),
+        highest_valuation=money_text(result.highest_valuation),
+        highest_valued_won=result.highest_valued_won,
+        winner_surplus=money_text(result.winner_surplus),
+        payoff_sign=result.payoff_sign,
+        any_overbid=result.any_overbid,
+        tie_for_highest_bid=result.tie_for_highest_bid,
+        tied_bidders=list(result.tied_bidders),
+        tie_break_rule=result.tie_break_rule,
+        ranking=[advertiser.advertiser for advertiser in ranked_advertisers],
+        explanation=explanation,
+        formulas=formulas,
     )
