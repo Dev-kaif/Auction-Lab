@@ -1,0 +1,25 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    environment:
+      AUCTIONLAB_DATABASE_URL: sqlite:////data/auctionlab.db
+      AUCTIONLAB_CORS_ORIGINS: http://localhost:${AUCTIONLAB_WEB_PORT:-8080},http://127.0.0.1:${AUCTIONLAB_WEB_PORT:-8080}
+    ports:
+      - "8000:8000"
+    volumes:
+      - auctionlab_data:/data
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${AUCTIONLAB_WEB_PORT:-8080}:80"
+    restart: unless-stopped
+
+volumes:
+  auctionlab_data:

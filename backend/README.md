@@ -19,6 +19,10 @@ SQLite defaults to `./auctionlab.db`, relative to the backend process working di
 
 Run backend tests from `backend/` with `python -m pytest`.
 
+The repository-root Docker Compose setup builds this service together with the frontend. In the container,
+SQLite is stored at `/data/auctionlab.db` on the named `auctionlab_data` volume, so rebuilding images does
+not remove saved experiments. See the root README for the one-command launch instructions.
+
 ## What the backend does
 
 `app/main.py` creates the FastAPI app, configures CORS and error responses, initializes the database at startup, and mounts the auction, simulation, and experiment routers. Pydantic schemas validate HTTP inputs and describe responses. The auction engine under `app/auctions/` has no dependency on FastAPI; simulation uses a vectorized NumPy engine in `app/simulation/` which mirrors the same rules. `app/analytics/metrics.py` summarizes completed simulation batches. `app/experiments.py` saves and reads experiment records and builds CSV output.

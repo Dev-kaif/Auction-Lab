@@ -1,49 +1,61 @@
-# AuctionLab: Game Theory & Data Science Simulator
+# AuctionLab
 
-AuctionLab is a four-advertiser game theory simulator with one focused workspace for manual auctions and
-automatic experiments. It includes first-price and second-price mechanisms, data visualizations, and
-SQLite-backed experiment history with CSV export. Read the [backend guide](backend/README.md) for API,
-auction formulas, simulation metrics, persistence, and CSV details; read the [frontend guide](frontend/README.md)
-for the workspace, request flow, charts, and responsive behavior.
+AuctionLab is an educational game theory simulator for exploring single-item auctions. Compare first-price and second-price rules using four advertisers (A, B, C, and D), either by entering valuations and bids yourself or by running automatic simulations. Results come from the auction engine and include payments, payoffs, revenue, and strategy comparisons. Completed experiments are saved locally in SQLite and can be revisited or exported as CSV.
 
-## Run locally
-Backend (Python 3.11+), in terminal 1:
+## Run with Docker
+
+From the repository root, start the app with Docker Compose:
+
+```bash
+docker compose up --build
+```
+
+Open the app at <http://localhost:8080>. The API is at <http://localhost:8000>, with interactive documentation at <http://localhost:8000/docs>. Experiment data is kept in a Docker volume when containers stop or are rebuilt.
+
+Stop the app with `Ctrl+C`. You can also run `docker compose down` to stop and remove the containers while keeping experiment data. To remove the data volume too, run:
+
+```bash
+docker compose down --volumes
+```
+
+To use a different web port, set `AUCTIONLAB_WEB_PORT`, for example:
+
+```bash
+AUCTIONLAB_WEB_PORT=8090 docker compose up --build
+```
+
+## Run locally without Docker
+
+You need Python 3.11+ and Node.js 18+. Start the backend in one terminal:
 
 ```bash
 cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
-uvicorn app.main:app --reload --port 8000     # API docs: http://localhost:8000/docs
+uvicorn app.main:app --reload --port 8000
 ```
 
-Frontend (Node 18+), in terminal 2:
+Then start the frontend in another terminal:
 
 ```bash
 cd frontend
 npm install
-npm run dev      # http://localhost:5173 (proxies /api to :8000)
+npm run dev
 ```
 
-SQLite defaults to `./auctionlab.db` in the backend working directory. Set `AUCTIONLAB_DATABASE_URL`
-to use another SQLAlchemy URL, for example `sqlite:////absolute/path/auctionlab.db`. Tables are
-initialized idempotently when the API starts or first handles a database request.
+Open the frontend URL printed by Vite (typically <http://localhost:5173>). It proxies API requests to the backend on port 8000.
 
 ## Tests
+
+Run the backend and frontend test suites from their respective directories:
+
 ```bash
-cd backend && python -m pytest        # engine + API + persistence
-cd frontend && npm test               # all frontend tests
+cd backend && python -m pytest
+cd frontend && npm test
 ```
 
-## Workspace
+## More documentation
 
-Choose the auction mechanism and Manual or Automatic mode in the workspace. Manual mode edits valuations
-and bids for A, B, C, and D, then displays backend-calculated ranking, payment, revenue, and payoffs.
-Automatic mode compares selected bidding-fraction profiles over repeated auctions and shows an aggregate
-revenue chart, result metrics, and optional supporting analysis. The backend reuses the same valuation
-scenarios across profiles and mechanisms in a run. The resolved seed is shown with results. Fixed-value
-scenarios repeat the same valuation vector on every auction and are deterministic.
-
-Completed manual auctions and simulations are saved in SQLite. Use Experiment History in the workspace
-header to reopen configuration/results, download CSV, or delete records. The sweep endpoint is an analysis
-request and does not create a history record. API docs (Swagger): http://localhost:8000/docs.
+- [Backend guide](backend/README.md): auction rules and formulas, API, simulation metrics, SQLite persistence, and CSV exports.
+- [Frontend guide](frontend/README.md): workspace structure, API usage, charts, and interface behavior.

@@ -16,6 +16,10 @@ Open <http://localhost:5173>. Vite proxies `/api` requests to `http://localhost:
 
 Run frontend tests with `npm test` from this directory. Tests use Vitest and React Testing Library in jsdom.
 
+For a containerized production-style run, use `docker compose up --build` from the repository root. Nginx
+serves the built React app and forwards `/api` requests to FastAPI; open <http://localhost:8080> by default.
+Set `AUCTIONLAB_WEB_PORT` to change the host port.
+
 ## App structure and request flow
 
 `src/main.tsx` mounts the React app and router. `src/App.tsx` maps the workspace to the root route; `src/pages/Workspace.tsx` owns shared mechanism/mode selection and the experiment-history overlay. Shared API functions and error conversion are in `src/api/client.ts`; TypeScript response/request models are in `src/types/`. Reusable cards, buttons, inputs, and auction result views are in `src/components/`. Simulation form/results are shared through `hooks/SimulationContext.tsx`, and input/analysis transformations live in `src/lib/`.
